@@ -4,7 +4,6 @@
   "private": true,
   "scripts": {
     "dev": "bun run --watch --env-file=.env src/index.ts",
-    "start": "node --env-file=.env ./dist/src/index.js",
     "build": "tsc && tsc-alias",
     "vercel-build": "npm run build",
     "lint": "biome lint .",
