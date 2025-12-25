@@ -9,6 +9,7 @@ import {
   listCoursesUserRoute,
   enrollCourseRoute,
   listEnrollmentsRoute,
+  courseCompleteRoute,
 } from "./route";
 import { 
   createCourseController, 
@@ -19,6 +20,7 @@ import {
   listCoursesAdminController, 
   listCoursesUserController,
   listEnrollmentsController,
+  markCourseCompletedController,
   updateCourseController 
 } from "./controller";
 import { authMiddleware, adminMiddleware } from "../../middleware/auth.middleware";
@@ -44,5 +46,7 @@ courseRouter.openapi(enrollCourseRoute, enrollCourseController);
 courseRouter.openapi(listEnrollmentsRoute, listEnrollmentsController);
 courseRouter.openapi(listCoursesUserRoute, listCoursesUserController);
 courseRouter.openapi(getCourseUserRoute, getCourseUserController);
+
+courseRouter.openapi(courseCompleteRoute,markCourseCompletedController)
 
 export default courseRouter;

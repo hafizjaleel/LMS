@@ -2,16 +2,17 @@ import { db } from "../../db";
 import { courses, courseMentors, courseProgress, courseWatchedLessons, courseCertificates, reviews } from "../../db/schema/course";
 import { enrollments } from "../../db/schema/enrollment";
 import { modules } from "../../db/schema/modules";
-import { lessons, lessonComments, lessonFiles } from "../../db/schema/lessons";
+import {  lessonComments, lessonFiles, lessons } from "../../db/schema/lessons";
 import { quizzes, quizQuestions, quizOptions, quizAnswers, quizAttempts } from "../../db/schema/quiz";
 import { files } from "../../db/schema/files";
 import { user } from "../../db/schema/auth";
-import { eq, count, and, like, isNull, sql } from "drizzle-orm";
+import { eq, count, and, like, isNull } from "drizzle-orm";
 import { generateSlug, generateUniqueSlug } from "../../utils/slug";
 import { documentStorage } from "../../config/upload";
 import type { ListCoursesParams } from "../../types/courses";
 import type z from "zod";
 import type { createCourseSchema, updateCourseSchema } from "./validation";
+import { generateCertificateHTML, generateCertificateId, generatePDF } from "../../lib/certificate-generater";
 
 
 /**
@@ -1234,3 +1235,187 @@ export const listEnrollmentsService = async (params: {
   };
 };
 
+
+/**
+ * Marks a course as completed and generates a certificate for the user.
+ * 
+ * @param {string} userId - The ID of the user marking the course as completed.
+ * @param {string} courseId - The ID of the course to mark as completed.
+ * @returns {Promise<{success: boolean, data: {courseProgress: CourseProgress, certificate: CourseCertificate}, message: string}>}
+ * - The response object containing the success status, course progress and certificate data, and a message.
+ * @throws {Error} - If the course or user is not found, or if the course is already completed.
+ */
+export const markCourseCompletedService = async (userId: string, courseId: string) => {
+  // Fetch course data
+  const [course] = await db
+    .select()
+    .from(courses)
+    .where(and(eq(courses.id, courseId), isNull(courses.deletedAt)))
+    .limit(1);
+
+  // Fetch user data
+  const [userData] = await db
+    .select()
+    .from(user)
+    .where(eq(user.id, userId))
+    .limit(1);
+
+  if (!course) {
+    throw new Error("Course not found");
+  }
+
+  if (!userData) {
+    throw new Error("User not found");
+  }
+
+  // Fetch enrollment
+  const [enrollment] = await db
+    .select()
+    .from(enrollments)
+    .where(and(eq(enrollments.userId, userId), eq(enrollments.courseId, courseId)))
+    .limit(1);
+
+  if (!enrollment) {
+    throw new Error("Enrollment not found");
+  }
+
+  // Check if certificate already exists
+  const [existingCertificate] = await db
+    .select()
+    .from(courseCertificates)
+    .where(and(
+      eq(courseCertificates.enrollmentId, enrollment.id),
+      isNull(courseCertificates.deletedAt)
+    ))
+    .limit(1);
+
+  if (existingCertificate) {
+    throw new Error("Certificate already issued for this course");
+  }
+
+  // Fetch all lessons for the course
+  const lessonsData = await db
+    .select({ id: lessons.id })
+    .from(lessons)
+    .innerJoin(modules, eq(lessons.moduleId, modules.id))
+    .where(and(
+      eq(modules.courseId, courseId),
+      isNull(lessons.deletedAt),
+      isNull(modules.deletedAt)
+    ));
+
+  // Check if all lessons are completed
+  let isCompleted = true;
+  for (const lesn of lessonsData) {
+    const [existingRecord] = await db
+      .select()
+      .from(courseWatchedLessons)
+      .where(and(
+        eq(courseWatchedLessons.lessonId, lesn.id),
+        eq(courseWatchedLessons.userId, userId),
+        isNull(courseWatchedLessons.deletedAt)
+      ))
+      .limit(1);
+
+    if (!existingRecord) {
+      isCompleted = false;
+      break;
+    }
+  }
+
+  if (!isCompleted) {
+    throw new Error("All lessons must be completed before generating certificate");
+  }
+
+  // Update course progress
+  const [courseProgressData] = await db
+    .update(courseProgress)
+    .set({
+      progressPercent: 100,
+      isCompleted: true,
+      completedAt: new Date()
+    })
+    .where(eq(courseProgress.enrollmentId, enrollment.id))
+    .returning();
+
+  // Generate unique certificate ID
+  const certificateId = generateCertificateId(courseId, userId);
+
+  // Generate certificate HTML
+  const html = generateCertificateHTML({
+    courseName: course.title,
+    userName: userData.name,
+    completedAt: courseProgressData?.completedAt ?? new Date(),
+    certificateId: certificateId
+  });
+
+// Generate PDF
+const pdfBuffer = await generatePDF(html);
+
+ // Create a proper ArrayBuffer copy
+  const arrayBuffer = new ArrayBuffer(pdfBuffer.length);
+  const view = new Uint8Array(arrayBuffer);
+  view.set(pdfBuffer);
+  
+  // Create File object for upload
+  const fileName = `certificate-${certificateId}.pdf`;
+  const pdfFile = new globalThis.File([arrayBuffer], fileName, { 
+    type: 'application/pdf',
+    lastModified: Date.now()
+  });
+// Upload to R2
+const uploadResult = await documentStorage.uploadDocument(pdfFile, {
+  userId: userId,
+  documentType: 'certificate',
+  version: 1
+});
+  // Save file record to database
+  const [fileRecord] = await db
+    .insert(files)
+    .values({
+      key: uploadResult.key,
+      originalFilename: uploadResult.originalFilename,
+      storedFilename: uploadResult.storedFilename,
+      filePath: uploadResult.filePath,
+      fileSize: uploadResult.fileSize,
+      mimeType: uploadResult.mimeType,
+      checksum: uploadResult.checksum,
+      documentType: 'certificate',
+      userId: userId,
+    })
+    .returning();
+
+  // Save certificate record
+  const [certificate] = await db
+    .insert(courseCertificates)
+    .values({
+      enrollmentId: enrollment.id,
+      certificateNumber: certificateId,
+      certificateFileId: fileRecord.id,
+      createdBy: userId,
+      issuedAt: new Date(),
+    })
+    .returning();
+
+  // Generate signed URL for immediate access
+  const certificateUrl = await documentStorage.getSignedUrl(uploadResult.key, 3600);
+
+  // Return response matching the schema
+  return {
+      courseProgress: {
+        id: courseProgressData.id,
+        enrollmentId: courseProgressData.enrollmentId,
+        courseId: courseId,
+        progressPercent: courseProgressData.progressPercent,
+        isCompleted: courseProgressData.isCompleted,
+        completedAt: courseProgressData.completedAt?.toISOString() ?? new Date().toISOString(),
+      },
+      certificate: {
+        id: certificate.id,
+        certificateNumber: certificate.certificateNumber,
+        certificateFileId: certificate.certificateFileId,
+        certificateUrl: certificateUrl,
+        issuedAt: certificate.issuedAt.toISOString(),
+      },
+    };
+};

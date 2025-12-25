@@ -42,6 +42,8 @@ export const env = createEnv({
     R2_SECRET_ACCESS_KEY: z.string().min(1, 'R2_SECRET_ACCESS_KEY is required'),
     R2_ACCOUNT_ID: z.string().min(1, 'R2_ACCOUNT_ID is required'),
 
+    SUPPORT_EMAIL: z.string().email().default('support@example'),
+
   },
 
   runtimeEnv: process.env,

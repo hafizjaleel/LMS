@@ -57,7 +57,7 @@ export class DocumentStorage {
     const buffer = await file.arrayBuffer();
     return createHash('sha256').update(new Uint8Array(buffer)).digest('hex');
   }
-async uploadDocument(file: File, options: UploadOptions) {
+async uploadDocument(file: File , options: UploadOptions) {
     const folderPath = this.generateFolderPath(options);
     const fileName = this.generateFileName(file, options);
     const key = `${folderPath}/${fileName}`;
