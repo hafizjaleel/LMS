@@ -1108,3 +1108,4 @@ export const markCourseCompletedResponseSchema = z.object({
     example: "Course marked as completed and certificate generated successfully",
   }),
 });
+

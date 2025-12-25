@@ -23,6 +23,9 @@ export const user = pgTable("user", {
   banReason: text("ban_reason"),
   banExpires: timestamp("ban_expires"),
   phoneNumber: text("phone_number"),
+  inAppNotificationsEnabled: boolean("in_app_notifications_enabled").default(true).notNull(),
+  emailNotificationsEnabled: boolean("email_notifications_enabled").default(true).notNull(),
+  pushNotificationsEnabled: boolean("push_notifications_enabled").default(false).notNull(),
 });
 
 export const session = pgTable(

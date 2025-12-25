@@ -15,6 +15,7 @@ import {
   listCoursesAdminService, 
   listCoursesUserService,
   listEnrollmentsService,
+  markCourseCompletedService,
   updateCourseService 
 } from "./service";
 import { logger } from "../../lib/logger";
@@ -532,12 +533,12 @@ export const markCourseCompletedController = async (c: Context) => {
     const validatedData = markCourseCompletedSchema.parse(body);
     const { userId, courseId } = validatedData;
 
-    // const result = await markCourseCompletedService(userId, courseId);
+    const result = await markCourseCompletedService(userId, courseId);
 
     return c.json(
       {
         success: true,
-        data: {},
+        data: result,
         message: "Course marked as completed and certificate generated successfully",
       },
       200

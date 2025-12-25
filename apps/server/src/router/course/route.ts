@@ -15,6 +15,8 @@ import {
   enrollmentQuerySchema,
   listEnrollmentsResponseSchema,
   errorResponseSchema,
+  markCourseCompletedSchema,
+  markCourseCompletedResponseSchema,
 } from "./validation";
 
 export const createCourseRoute = createRoute({
@@ -458,4 +460,47 @@ export const listEnrollmentsRoute = createRoute({
       description: "Internal server error",
     },
   },
+});
+
+export const courseCompleteRoute = createRoute({
+  method: "post",
+  path: "/complete",
+  tags: ["Courses"],
+  security: [{ Bearer: [] }, { cookieAuth: [] }],
+  request: {
+    body: {
+      content: {
+        "application/json": {
+          schema: markCourseCompletedSchema,
+        },
+      },
+      required: true,
+    },
+  },
+  responses: {
+    200: {
+      content: {
+        "application/json": {
+          schema: markCourseCompletedResponseSchema,
+        },
+      },
+      description: "Course completed successfully",
+    },
+    401: {
+      content: {
+        "application/json": {
+          schema: errorResponseSchema,
+        },
+      },
+      description: "Unauthorized - authentication required",
+    },
+    500: {
+      content: {
+        "application/json": {
+          schema: errorResponseSchema,
+        },
+      },
+      description: "Internal server error",
+    },  
+  }
 });
