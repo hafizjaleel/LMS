@@ -9,6 +9,7 @@ import { logger } from "./lib/logger";
 import router from "./router";
 import { testEmailConnection } from "./lib/email";
 import { seedWithBetterAuth } from "./db/seed-super-admin";
+import { initJobs } from "../jobs";
 
 const app = new OpenAPIHono();
 
@@ -70,6 +71,8 @@ app.doc("/openapi.json", {
 });
 
 app.get("/docs", swaggerUI({ url: "/openapi.json" }));
+
+initJobs();
 
 app.onError((err, c) => {
   logger.error(err, "Application error");

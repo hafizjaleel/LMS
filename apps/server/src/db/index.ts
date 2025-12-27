@@ -11,6 +11,7 @@ import {
   sessionRelations,
   userRelations,
   verification,
+  pushSubscriptions,
 } from "./schema/auth";
 import {
   courseCertificates,
@@ -53,6 +54,7 @@ import {
   quizzesRelations,
 } from "./schema/quiz";
 import { files, filesRelations } from "./schema/files"
+import { webinars } from "./schema/webinar";
 
 const schema = {
   user,
@@ -98,7 +100,9 @@ const schema = {
   lessonFiles,
   lessonFilesRelations,
   files,
-  filesRelations
+  filesRelations,
+  pushSubscriptions,
+  webinars
 };
 
 neonConfig.webSocketConstructor = ws;

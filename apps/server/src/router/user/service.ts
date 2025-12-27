@@ -5,6 +5,8 @@ import { eq, count, and, like, isNull, or, sql } from "drizzle-orm";
 import { documentStorage } from "../../config/upload";
 import type z from "zod";
 import type { userPaginationQuerySchema } from "./validation";
+import { auth } from "../../lib/auth";
+import { Context } from "hono";
 
 
 
@@ -99,3 +101,45 @@ export const listUsersService = async (params: z.infer<typeof userPaginationQuer
   };
 };
 
+
+/**
+ * Retrieves a list of all admin users.
+ *
+ * @returns {Promise<User[]>} - List of admin users with only their IDs.
+ */
+export const getAllAdmin = async () => {
+  const admins = await db.query.user.findMany({
+  where: eq(user.role, "admin"),
+  columns: { id: true },
+});
+return admins;
+}
+
+/**
+ * Retrieves a list of all user users.
+ *
+ * Retrieves a list of all user users, each containing only their IDs.
+ *
+ * @returns {Promise<User[]>} - List of user users with only their IDs.
+ */
+export const getAllUsers = async () => {
+ const users = await db.query.user.findMany({
+          where: eq(user.role, "user"),
+          columns: { id: true },
+        });
+        return users;
+}
+
+/**
+ * Retrieves the currently authenticated user.
+ *
+ * Retrieves the user associated with the authentication session for the given request.
+ * If no authentication session is found, returns null.
+ *
+ * @param {Context} c - The Hono context object.
+ * @returns {Promise<User | null>} - The currently authenticated user or null if no user is found.
+ */
+export async function getCurrentUser(c: Context) {
+  const session = await auth.api.getSession({ headers: c.req.raw.headers });
+  return session?.user; 
+}

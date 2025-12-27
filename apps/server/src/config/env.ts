@@ -44,6 +44,9 @@ export const env = createEnv({
 
     SUPPORT_EMAIL: z.string().email().default('support@example'),
 
+    VAPID_PUBLIC_KEY:z.string().min(1, 'VAPID_PUBLIC_KEY is required'),
+    VAPID_PRIVATE_KEY:z.string().min(1, 'VAPID_PRIVATE_KEY is required'),
+
   },
 
   runtimeEnv: process.env,
