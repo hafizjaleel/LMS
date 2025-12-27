@@ -6,19 +6,22 @@ import {
   markCourseCompletedSchema,
   updateCourseSchema,
 } from "./validation";
-import { 
-  createCourseService, 
-  deleteCourseService, 
-  enrollCourseService, 
-  getCourseAdminService, 
-  getCourseUserService, 
-  listCoursesAdminService, 
+import {
+  createCourseService,
+  deleteCourseService,
+  enrollCourseService,
+  getCourseAdminService,
+  getCourseUserService,
+  listCoursesAdminService,
   listCoursesUserService,
   listEnrollmentsService,
   markCourseCompletedService,
-  updateCourseService 
+  updateCourseService
 } from "./service";
 import { logger } from "../../lib/logger";
+import { sendNotification } from "../notification/service";
+import { getAllAdmin, getAllUsers, getCurrentUser } from "../user/service";
+import { user } from "../../db/schema/auth";
 
 /**
  * Handles an HTTP request to create a course.
@@ -49,6 +52,26 @@ export const createCourseController = async (c: Context) => {
 
     const course = await createCourseService(validatedData);
 
+    if (course) {
+      const currentUser = await getCurrentUser(c);
+
+      if (currentUser?.role === "admin") {
+        const users = await getAllUsers();
+        await Promise.all(
+          users.map((u: { id: string; }) =>
+            sendNotification({
+              userId: u.id,
+              notificationType: "course_update",
+              firstMessage: "📢 New course has been published",
+              secondMessage: validatedData.title,
+              link: `/courses`,
+              priority: "medium",
+              metadata: { courseName: validatedData.title }
+            })
+          )
+        );
+      }
+    }
     return c.json(
       {
         success: true,
@@ -304,7 +327,7 @@ export const listCoursesAdminController = async (c: Context) => {
     const status = query.status as "published" | "on_hold" | "draft" | undefined;
     const isFree = query.isFree === "true" ? true : query.isFree === "false" ? false : undefined;
 
-    
+
     const result = await listCoursesAdminService({
       page,
       limit,
@@ -351,7 +374,7 @@ export const listCoursesUserController = async (c: Context) => {
     const level = query.level as "beginner" | "intermediate" | "advanced" | undefined;
     const status = query.status as "published" | "on_hold" | "draft" | undefined;
     const isFree = query.isFree === "true" ? true : query.isFree === "false" ? false : undefined;
-    
+
     // Get user ID from authentication context
     const userId = c.get("user")?.id;
 
@@ -364,7 +387,7 @@ export const listCoursesUserController = async (c: Context) => {
       isFree,
       userId,
     });
-    
+
     return c.json(
       {
         success: true,
@@ -406,6 +429,33 @@ export const enrollCourseController = async (c: Context) => {
 
     const result = await enrollCourseService(validatedData.userId, validatedData.courseId);
 
+    if (result) {
+      const currentUser = await getCurrentUser(c);
+      await sendNotification({
+        userId: validatedData.userId,
+        notificationType: "course_enrollment",
+        firstMessage: " You have successfully enrolled in a course",
+        secondMessage: "Start learning now",
+        link: `/courses/${validatedData.courseId}`,
+        priority: "medium",
+        metadata: { courseId: validatedData.courseId }
+      });
+
+      const admins = await getAllAdmin();
+
+      await Promise.all(
+        admins.map(a =>
+          sendNotification({
+            userId: a.id,
+            notificationType: "course_enrollment",
+            firstMessage: `A user enrolled in a course`,
+            secondMessage: `User ID: ${currentUser?.id}`,
+            link: `/admin/courses/${validatedData.courseId}`,
+            priority: "low",
+          })
+        )
+      );
+    }
     return c.json(
       {
         success: true,
@@ -471,7 +521,7 @@ export const listEnrollmentsController = async (c: Context) => {
 
     // Get user from authentication context
     const authUser = c.get("user");
-    
+
     if (!authUser?.id) {
       return c.json(
         {
@@ -535,6 +585,34 @@ export const markCourseCompletedController = async (c: Context) => {
 
     const result = await markCourseCompletedService(userId, courseId);
 
+    if(result){
+      await sendNotification({
+  userId,
+  notificationType: "course_completed",
+  firstMessage: "Course completed!",
+  secondMessage: "Your certificate is ready to download",
+  link: `/courses/${courseId}/certificate`,
+  priority: "high",
+  metadata: { courseId }
+});
+
+// notify admins about completion
+const admins = await getAllAdmin();
+await Promise.all(
+  admins.map(a =>
+    sendNotification({
+      userId: a.id,
+      notificationType: "certificate_issued",
+      firstMessage: "A learner completed a course",
+      secondMessage: `User ID: ${userId}`,
+      link: `/admin/certificates`,
+      priority: "low",
+      metadata: { courseId }
+    })
+  )
+);
+
+    }
     return c.json(
       {
         success: true,
@@ -555,7 +633,7 @@ export const markCourseCompletedController = async (c: Context) => {
     }
 
     const errorMessage = error instanceof Error ? error.message : "Internal Server Error";
-    
+
     // Handle specific error cases
     if (errorMessage.includes("not enrolled")) {
       return c.json(
@@ -566,7 +644,7 @@ export const markCourseCompletedController = async (c: Context) => {
         404
       );
     }
-    
+
     if (errorMessage.includes("already completed")) {
       return c.json(
         {
@@ -576,7 +654,7 @@ export const markCourseCompletedController = async (c: Context) => {
         409
       );
     }
-    
+
     if (errorMessage.includes("not completed all lessons")) {
       return c.json(
         {

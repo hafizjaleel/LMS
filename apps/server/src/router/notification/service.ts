@@ -1,9 +1,11 @@
 import { eq, and, isNull } from 'drizzle-orm';
-import { user } from '../../db/schema/auth';
+import { pushSubscriptions, user } from '../../db/schema/auth';
 import { db } from '../../db';
 import { logger } from '../../lib/logger';
 import { notificationPriorityEnum, notifications, notificationTypeEnum } from '../../db/schema/notification';
 import { generateEmailTemplate, sendNotificationEmail } from '../../lib/email';
+import { webpush } from '../../lib/web-push';
+import { PushPayload } from '../../types/push-notification';
 
 export interface SendNotificationParams {
   userId: string;
@@ -15,6 +17,10 @@ export interface SendNotificationParams {
   // Email-specific data (optional)
  metadata?: Record<string, string | number | boolean | Date>;
 
+}
+
+interface WebPushError extends Error {
+  statusCode?: number;
 }
 
 function generateEmailMetadata(
@@ -258,16 +264,21 @@ if (userRecord.emailNotificationsEnabled) {
         logger.error({ error, userId }, 'Failed to send email notification');
       }
     }
-     // Push notifications - TODO: Implement push notification logic
-    // if (userRecord.pushNotificationsEnabled && pushData) {
-    //   try {
-    //     await sendPushNotification(userId, pushData);
-    //     results.push = true;
-    //   } catch (error) {
-    //     results.errors.push(`Push notification failed: ${error}`);
-    //   }
-    // }
+   if (userRecord.pushNotificationsEnabled) {
+  try {
+    await sendPushNotification(userId, {
+      title: firstMessage,
+      body: secondMessage as string,
+      link,
+      type: notificationType,
+      priority
+    });
 
+    results.push = true;
+  } catch (error) {
+    results.errors.push(`Push notification failed: ${error}`);
+  }
+}
     return results;
   } catch (error) {
     logger.error({ error, userId }, 'Notification service error');
@@ -351,3 +362,40 @@ export async function deleteNotification(notificationId: string, userId: string)
     );
 }
 
+
+/**
+ * Send a push notification to all registered devices for a user
+ * @param {string} userId - The ID of the user to send the notification to
+ * @param {any} payload - The payload of the notification
+ * @returns {Promise<void>}
+ */
+export async function sendPushNotification(userId: string, payload: PushPayload) {
+  const subs = await db.query.pushSubscriptions.findMany({
+    where: eq(pushSubscriptions.userId, userId),
+  });
+
+  await Promise.all(
+    subs.map(async (sub) => {
+      try {
+        await webpush.sendNotification(
+          {
+            endpoint: sub.endpoint,
+            keys: {
+              p256dh: sub.p256dh,
+              auth: sub.auth,
+            },
+          },
+          JSON.stringify(payload)
+        );
+      } catch (err){
+        const e = err as WebPushError;
+
+        if (e?.statusCode === 410 || e?.statusCode === 404) {
+          await db
+            .delete(pushSubscriptions)
+            .where(eq(pushSubscriptions.id, sub.id));
+        }
+      }
+    })
+  );
+}

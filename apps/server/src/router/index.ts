@@ -8,6 +8,7 @@ import quizRouter from "./quiz";
 import appRouter from "./app";
 import reviewRouter from "./review";
 import webinarRouter from "./webinar";
+import pushRouter from "./push";
 
 const router = new OpenAPIHono();
 
@@ -21,6 +22,8 @@ router.route("/v1/lesson",lessonRouter)
 router.route("/v1/quiz",quizRouter)
 router.route("/v1/review",reviewRouter)
 router.route("/v1/webinar",webinarRouter)
+router.route("/v1/api/push", pushRouter);
+
 
 
 export default router;
