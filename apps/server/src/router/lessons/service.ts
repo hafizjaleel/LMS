@@ -8,6 +8,18 @@ import { lessonComments, lessonFiles, lessons } from "../../db/schema/lessons";
 import { modules } from "../../db/schema/modules";
 import { user } from "../../db/schema/auth";
 import type { createLessonSchema, markLessonCompletedSchema, updateLessonSchema, createLessonCommentSchema, updateLessonCommentSchema } from "./validation";
+import { createDirectUpload, deleteAsset, getAssetDetails, getUploadDetails } from "../../lib/mux-config";
+
+/**
+ * Requests a direct upload URL for video upload
+ * @param {string} [corsOrigin] - CORS origin for video upload (defaults to *)
+ * @returns {Promise<CreateDirectUploadResponse>} - Direct upload URL response
+ * @throws {Error} - If an error occurs during the creation process
+ */
+export const requestVideoUploadService = async (corsOrigin?: string) => {
+  const upload = await createDirectUpload(corsOrigin);
+  return upload;
+};
 
 /**
  * Creates a new lesson in the database
@@ -27,6 +39,41 @@ export const createLessonService = async (
 
   if (!module) {
     throw new Error("Module not found");
+  }
+
+  if (data.lessonType === 'video') {
+    if (!data.muxUploadId) {
+      throw new Error("Mux upload ID is required for video lessons");
+    }
+
+    // Get upload details from Mux
+    const uploadDetails = await getUploadDetails(data.muxUploadId);
+    
+    if (uploadDetails.status === 'errored') {
+      throw new Error("Video upload failed");
+    }
+
+    if (uploadDetails.status !== 'asset_created') {
+      throw new Error("Video is still being processed. Please wait.");
+    }
+
+    // Create lesson with Mux data
+    const [newLesson] = await db
+      .insert(lessons)
+      .values({
+        moduleId: data.moduleId,
+        title: data.title,
+        description: data.description,
+        lessonType: data.lessonType,
+        uploadedBy: userId,
+        lessonOrder: data.lessonOrder,
+        muxUploadId: data.muxUploadId,
+        muxAssetId: uploadDetails.asset_id,
+        videoStatus: 'preparing',
+      })
+      .returning();
+
+    return newLesson;
   }
 
   if (data.fileIds && data.fileIds.length > 0) {
@@ -86,6 +133,42 @@ export const updateLessonService = async (
 
   if (!existingLesson) {
     throw new Error("Lesson not found");
+  }
+
+  if (data.lessonType === 'video' && data.muxUploadId) {
+    const uploadDetails = await getUploadDetails(data.muxUploadId);
+    
+    if (uploadDetails.status === 'errored') {
+      throw new Error("Video upload failed");
+    }
+
+    if (uploadDetails.status !== 'asset_created') {
+      throw new Error("Video is still being processed. Please wait.");
+    }
+
+    if (existingLesson.muxAssetId) {
+      try {
+        await deleteAsset(existingLesson.muxAssetId);
+      } catch (error) {
+        console.error('Failed to delete old Mux asset:', error);
+      }
+    }
+
+    const updateData = {
+      ...data,
+      muxUploadId: data.muxUploadId,
+      muxAssetId: uploadDetails.asset_id,
+      videoStatus: 'preparing',
+      updatedAt: new Date(),
+    };
+
+    const [updatedLesson] = await db
+      .update(lessons)
+      .set(updateData)
+      .where(eq(lessons.id, id))
+      .returning();
+
+    return updatedLesson;
   }
 
   if (data.fileIds && data.fileIds.length > 0) {
@@ -500,3 +583,130 @@ export const deleteLessonCommentService = async (
 
   return true;
 };
+
+
+/**
+ * Handles Mux asset ready event
+ * Called when Mux asset is ready (asset_status = 'asset_created')
+ * Updates the lesson with the new playback ID and video duration
+ * @param {string} assetId - Mux asset ID
+ */
+export async function handleAssetReady(assetId: string) {
+  const assetDetails = await getAssetDetails(assetId);
+  
+  await db
+    .update(lessons)
+    .set({
+      videoStatus: 'ready',
+      muxPlaybackId: assetDetails.playbackId,
+      videoDuration: assetDetails.duration,
+      updatedAt: new Date(),
+    })
+    .where(eq(lessons.muxAssetId, assetId));
+}
+
+/**
+ * Handles Mux asset error event
+ * Called when Mux asset creation fails
+ * Updates the lesson with an 'errored' video status
+ * @param {string} assetId - Mux asset ID
+ */
+export async function handleAssetError(assetId: string, errors: unknown) {
+  await db
+    .update(lessons)
+    .set({
+      videoStatus: 'errored',
+      updatedAt: new Date(),
+    })
+    .where(eq(lessons.muxAssetId, assetId));
+}
+
+/**
+ * Handles Mux upload completed event
+ * Called when Mux upload is complete and asset is created
+ * Asset ID will be available in the webhook data
+ * @param {string} uploadId - Mux upload ID
+ */
+export async function handleUploadCompleted(uploadId: string, assetId: string) {
+  const [updatedLesson] = await db
+      .update(lessons)
+      .set({
+        muxAssetId: assetId,
+        videoStatus: "preparing",
+        updatedAt: new Date(),
+      })
+      .where(eq(lessons.muxUploadId, uploadId))
+      .returning()
+
+      if (updatedLesson) {
+      
+      try {
+        const assetDetails = await getAssetDetails(assetId);
+    
+        if (assetDetails.playbackId) {
+          await db
+            .update(lessons)
+            .set({
+              muxPlaybackId: assetDetails.playbackId,
+              updatedAt: new Date(),
+            })
+            .where(eq(lessons.id, updatedLesson.id));
+        }
+      } catch (detailError) {
+        throw new Error(`Could not fetch asset details immediately: ${detailError}`);
+
+      }
+    } else {
+      throw new Error(`No lesson found with muxUploadId: ${uploadId}`);
+    }
+}
+
+/**
+ * Handles Mux upload cancelled event
+ * Called when Mux upload is cancelled
+ * Asset ID will be available in the webhook data
+ * @param {string} uploadId - Mux upload ID
+ */
+export async function handleUploadCancelled(uploadId: string) {
+  try {
+
+    const [updatedLesson] = await db
+      .update(lessons)
+      .set({
+        videoStatus: "cancelled",
+        updatedAt: new Date(),
+      })
+      .where(eq(lessons.muxUploadId, uploadId))
+      .returning();
+
+  } catch (error) {
+    throw new Error(`Error handling upload cancelled for ${uploadId}:${error}`,);
+    
+  }
+}
+
+/**
+ * Handles Mux upload errored event
+ * Called when Mux upload fails
+ * @param {string} uploadId - Mux upload ID
+ * @param {any} [uploadError] - Optional error details from Mux
+ */
+export async function handleUploadErrored(uploadId: string) {
+  try {
+
+    const [updatedLesson] = await db
+      .update(lessons)
+      .set({
+        videoStatus: "upload_failed",
+        updatedAt: new Date(),
+      })
+      .where(eq(lessons.muxUploadId, uploadId))
+      .returning();
+
+
+  } catch (error) {
+
+    throw error;
+  }
+}
+

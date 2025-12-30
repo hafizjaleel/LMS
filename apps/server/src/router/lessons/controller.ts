@@ -1,7 +1,9 @@
 import { type Context } from "hono";
 import { ZodError } from "zod";
-import { createLessonSchema, updateLessonSchema, lessonPaginationQuerySchema, lessonIdParamSchema, markLessonCompletedSchema, createLessonCommentSchema, updateLessonCommentSchema, commentIdParamSchema, listLessonCommentsQuerySchema } from "./validation";
-import { createLessonService, updateLessonService, listLessonsService, getLessonByIdService, deleteLessonService, markLessonCompletedService, createLessonCommentService, listLessonCommentsService, getLessonCommentService, updateLessonCommentService, deleteLessonCommentService } from "./service";
+import { createLessonSchema, updateLessonSchema, lessonPaginationQuerySchema, lessonIdParamSchema, markLessonCompletedSchema, createLessonCommentSchema, updateLessonCommentSchema, commentIdParamSchema, listLessonCommentsQuerySchema, requestVideoUploadSchema } from "./validation";
+import { createLessonService, updateLessonService, listLessonsService, getLessonByIdService, deleteLessonService, markLessonCompletedService, createLessonCommentService, listLessonCommentsService, getLessonCommentService, updateLessonCommentService, deleteLessonCommentService, requestVideoUploadService, handleAssetReady, handleAssetError, handleUploadCompleted, handleUploadCancelled, handleUploadErrored } from "./service";
+import { mux } from "../../lib/mux-config";
+
 
 /**
  * Handles an HTTP request to create a lesson.
@@ -50,14 +52,16 @@ export const createLessonController = async (c: Context) => {
       );
     }
 
-    if (error instanceof Error && error.message === "Module not found") {
-      return c.json(
-        {
-          success: false,
-          error: error.message,
-        },
-        404
-      );
+   if (error instanceof Error) {
+      if (error.message === "Module not found") {
+        return c.json({ success: false, error: error.message }, 404);
+      }
+      if (error.message.includes("Mux upload") || error.message.includes("Video")) {
+        return c.json({ success: false, error: error.message }, 400);
+      }
+      if (error.message.startsWith("Files not found")) {
+        return c.json({ success: false, error: error.message }, 400);
+      }
     }
 
     if (error instanceof Error && error.message.startsWith("Files not found")) {
@@ -760,5 +764,123 @@ export const deleteLessonCommentController = async (c: Context) => {
       },
       500
     );
+  }
+};
+
+
+/**
+ * Handles an HTTP request to create a video upload URL.
+ *
+ * The request body must contain:
+ * - corsOrigin: The origin of the request.
+ *
+ * The response will contain:
+ * - success: A boolean indicating if the operation was successful.
+ * - data: An object containing the upload URL and other metadata.
+ * - message: A string indicating the result of the operation.
+ *
+ * If the request body is invalid, a 400 response will be returned.
+ * If an error occurs, a 500 response will be returned.
+ */
+export const requestVideoUploadController = async (c: Context) => {
+  try {
+    const body = await c.req.json();
+    const validatedData = requestVideoUploadSchema.parse(body);
+
+    const uploadData = await requestVideoUploadService(validatedData.corsOrigin);
+
+    return c.json(
+      {
+        success: true,
+        data: uploadData,
+        message: "Video upload URL created successfully",
+      },
+      200
+    );
+  } catch (error) {
+    if (error instanceof ZodError) {
+      return c.json(
+        {
+          success: false,
+          error: error.issues[0]?.message ?? "Validation Error",
+        },
+        400
+      );
+    }
+
+    return c.json(
+      {
+        success: false,
+        error: error instanceof Error ? error.message : "Internal Server Error",
+      },
+      500
+    );
+  }
+};
+
+/**
+ * Handles an HTTP request from a Mux webhook.
+ *
+ * The request body must contain a Mux webhook event.
+ *
+ * The response will contain a JSON object with a single property "success".
+ * If the webhook is processed successfully, the value of "success" will be true.
+ * If an error occurs during webhook processing, the value of "success" will be false and an additional "error" property will be present with an error message.
+ *
+ * The following webhook events are handled:
+ * - "video.asset.ready": Triggers when a video asset is ready for use.
+ * - "video.asset.errored": Triggers when a video asset fails to process.
+ * - "video.upload.asset_created": Triggers when a video upload is completed.
+ * - "video.upload.cancelled": Triggers when a video upload is cancelled.
+ * - "video.upload.errored": Triggers when a video upload fails.
+ *
+ * If an unhandled webhook event is received, an error will be thrown with a message indicating the unhandled event type.
+ */
+export const muxWebhookController = async (c: Context) => {
+  try {
+   const body = await c.req.text(); 
+    const headersList = c.req.header();
+    
+    // Verify and unwrap the webhook
+    const event = mux.webhooks.unwrap(body, headersList);
+    
+    const { type, data } = event;
+
+     switch (type) {
+      case "video.asset.ready":
+        await handleAssetReady(data.id);
+        break;
+      
+      case "video.asset.errored":
+        await handleAssetError(data.id, data.errors);
+        break;
+      
+      case "video.upload.asset_created":
+        await handleUploadCompleted(data.id, data.asset_id as string);
+        break;
+      
+      case "video.upload.cancelled":
+        await handleUploadCancelled(data.id);
+        break;
+      
+      case "video.upload.errored":
+        await handleUploadErrored(data.id);
+        break;
+      
+      default:
+        throw new Error(`Unhandled webhook type: ${type}`);
+    }
+
+    return c.json({ success: true }, 200);
+  } catch (error) {
+
+    return c.json(
+      { 
+        success: false, 
+        error: error instanceof Error ? error.message : "Webhook processing failed" 
+      },
+      500
+    );
+  
   }
 };

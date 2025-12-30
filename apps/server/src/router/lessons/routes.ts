@@ -22,6 +22,8 @@ import {
   updateLessonCommentSchema,
   updateLessonCommentResponseSchema,
   deleteLessonCommentResponseSchema,
+  videoUploadResponseSchema,
+  requestVideoUploadSchema,
 } from "./validation";
 
 export const createLessonRoute = createRoute({
@@ -624,6 +626,109 @@ export const deleteLessonCommentRoute = createRoute({
         },
       },
       description: "Internal server error",
+    },
+  },
+});
+
+export const requestVideoUploadRoute = createRoute({
+  method: "post",
+  path: "/video/upload-url",
+  tags: ["Lessons - Admin"],
+  security: [{ Bearer: [] }, { cookieAuth: [] }],
+  request: {
+    body: {
+      content: {
+        "application/json": {
+          schema: requestVideoUploadSchema,
+        },
+      },
+      required: true,
+    },
+  },
+  responses: {
+    200: {
+      content: {
+        "application/json": {
+          schema: videoUploadResponseSchema,
+        },
+      },
+      description: "Video upload URL created successfully",
+    },
+    400: {
+      content: {
+        "application/json": {
+          schema: errorResponseSchema,
+        },
+      },
+      description: "Bad request - invalid input",
+    },
+    401: {
+      content: {
+        "application/json": {
+          schema: errorResponseSchema,
+        },
+      },
+      description: "Unauthorized - authentication required",
+    },
+    500: {
+      content: {
+        "application/json": {
+          schema: errorResponseSchema,
+        },
+      },
+      description: "Internal server error",
+    },
+  },
+});
+
+// Mux webhook route (no auth required)
+export const muxWebhookRoute = createRoute({
+  method: "post",
+  path: "/webhooks/mux",
+  tags: ["Webhooks"],
+  request: {
+    body: {
+      content: {
+        "application/json": {
+          schema: z.object({
+            type: z.string().openapi({
+              description: "Webhook event type",
+              example: "video.asset.ready",
+            }),
+            data: z.any().openapi({
+              description: "Webhook event data",
+            }),
+          }),
+        },
+      },
+      required: true,
+    },
+  },
+  responses: {
+    200: {
+      content: {
+        "application/json": {
+          schema: z.object({
+            success: z.boolean().openapi({
+              description: "Indicates if webhook was processed successfully",
+              example: true,
+            }),
+          }),
+        },
+      },
+      description: "Webhook processed successfully",
+    },
+    500: {
+      content: {
+        "application/json": {
+          schema: z.object({
+            success: z.boolean().openapi({
+              example: false,
+            }),
+          }),
+        },
+      },
+      description: "Webhook processing failed",
     },
   },
 });

@@ -47,6 +47,9 @@ export const env = createEnv({
     VAPID_PUBLIC_KEY:z.string().min(1, 'VAPID_PUBLIC_KEY is required'),
     VAPID_PRIVATE_KEY:z.string().min(1, 'VAPID_PRIVATE_KEY is required'),
 
+    MUX_TOKEN_ID: z.string().min(1, 'MUX_TOKEN_ID is required'),
+MUX_TOKEN_SECRET:z.string().min(1, 'MUX_TOKEN_SECRET is required'),
+MUX_WEBHOOK_SECRET:z.string().min(1, 'MUX_WEBHOOK_SECRET is required'),
   },
 
   runtimeEnv: process.env,

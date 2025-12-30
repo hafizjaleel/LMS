@@ -42,6 +42,10 @@ export const createLessonSchema = z.object({
     description: "Array of file IDs to attach to the lesson",
     example: ["456e7890-e89b-12d3-a456-426614174001"],
   }),
+   muxUploadId: z.string().optional().openapi({
+    description: "Mux upload ID (required for video lessons)",
+    example: "upload_abc123",
+  }),
 });
 
 // Update lesson request schema
@@ -65,6 +69,10 @@ export const updateLessonSchema = z.object({
   fileIds: z.array(z.string().uuid()).optional().openapi({
     description: "Array of file IDs to attach to the lesson (replaces existing files)",
     example: ["456e7890-e89b-12d3-a456-426614174001"],
+  }),
+  muxUploadId: z.string().optional().openapi({
+    description: "Mux upload ID (required for video lessons)",
+    example: "upload_abc123",
   }),
 });
 
@@ -130,6 +138,10 @@ export const lessonResponseSchema = z.object({
     description: "Order of the lesson in the module",
     example: 1,
   }),
+  muxAssetId: z.string().nullable().optional(),
+  muxPlaybackId: z.string().nullable().optional(),
+  videoStatus: z.string().nullable().optional(),
+  videoDuration: z.number().nullable().optional(),
   createdAt: z.string().datetime().openapi({
     description: "Creation timestamp",
     example: "2024-12-03T12:00:00Z",
@@ -493,5 +505,33 @@ export const deleteLessonCommentResponseSchema = z.object({
   message: z.string().openapi({
     description: "Success message",
     example: "Comment deleted successfully",
+  }),
+});
+
+export const requestVideoUploadSchema = z.object({
+  corsOrigin: z.string().url().optional().openapi({
+    description: "CORS origin for video upload (defaults to *)",
+    example: "https://yourdomain.com",
+  }),
+});
+
+export const videoUploadResponseSchema = z.object({
+  success: z.boolean().openapi({
+    description: "Indicates if the operation was successful",
+    example: true,
+  }),
+  data: z.object({
+    uploadId: z.string().openapi({
+      description: "Mux upload ID",
+      example: "upload_abc123",
+    }),
+    uploadUrl: z.string().url().openapi({
+      description: "Direct upload URL for video",
+      example: "https://storage.googleapis.com/video-storage-us-east1.mux.com/...",
+    }),
+  }),
+  message: z.string().openapi({
+    description: "Success message",
+    example: "Video upload URL created successfully",
   }),
 });
