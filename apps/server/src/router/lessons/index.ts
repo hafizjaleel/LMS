@@ -1,12 +1,27 @@
 import { OpenAPIHono } from "@hono/zod-openapi";
-import { createLessonRoute, updateLessonRoute, listLessonsRoute, getLessonByIdRoute, deleteLessonRoute, markLessonCompletedRoute, createLessonCommentRoute, listLessonCommentsRoute, getLessonCommentRoute, updateLessonCommentRoute, deleteLessonCommentRoute } from "./routes";
-import { createLessonController, updateLessonController, listLessonsController, getLessonByIdController, deleteLessonController, markLessonCompletedController, createLessonCommentController, listLessonCommentsController, getLessonCommentController, updateLessonCommentController, deleteLessonCommentController } from "./controller";
+import { createLessonRoute, updateLessonRoute, listLessonsRoute, getLessonByIdRoute, deleteLessonRoute, markLessonCompletedRoute, createLessonCommentRoute, listLessonCommentsRoute, getLessonCommentRoute, updateLessonCommentRoute, deleteLessonCommentRoute, requestVideoUploadRoute, muxWebhookRoute } from "./routes";
+import { createLessonController, updateLessonController, listLessonsController, getLessonByIdController, deleteLessonController, markLessonCompletedController, createLessonCommentController, listLessonCommentsController, getLessonCommentController, updateLessonCommentController, deleteLessonCommentController, requestVideoUploadController, muxWebhookController } from "./controller";
 import { authMiddleware } from "../../middleware/auth.middleware";
 
 const lessonRouter = new OpenAPIHono();
 
 // Apply authentication to all routes
-// lessonRouter.use("*", authMiddleware);
+// lessonRouter.use("*", async (c, next) => {
+//   // Skip auth for webhook endpoint
+//   if (c.req.path.includes("/webhooks/mux")) {
+//     return next();
+//   }
+//   return authMiddleware(c, next);
+// });
+
+// ===================== VIDEO UPLOAD ROUTES =====================
+
+// Request video upload URL (authenticated users)
+lessonRouter.openapi(requestVideoUploadRoute, requestVideoUploadController);
+
+// Mux webhook (no auth required)
+lessonRouter.openapi(muxWebhookRoute, muxWebhookController);
+
 
 // Create lesson route (authenticated users)
 lessonRouter.openapi(createLessonRoute, createLessonController);
