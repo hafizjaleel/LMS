@@ -32,10 +32,7 @@ const quizRouter = new OpenAPIHono();
 // Apply authentication to all routes
 // quizRouter.use("*", authMiddleware);
 
-// User routes (authenticated users - no correct answers exposed)
-quizRouter.openapi(listQuizzesUserRoute, listQuizzesUserController);
-quizRouter.openapi(getQuizByIdUserRoute, getQuizByIdUserController);
-quizRouter.openapi(submitQuizAnswerRoute, submitQuizAnswerController);
+
 
 // Admin routes (require admin role - includes correct answers)
 // quizRouter.use("/admin", adminMiddleware);
@@ -48,5 +45,10 @@ quizRouter.openapi(updateQuestionRoute, updateQuestionController);
 // quizRouter.use("/:id", adminMiddleware);
 quizRouter.openapi(deleteQuizRoute, deleteQuizController);
 quizRouter.openapi(deleteQuestionRoute, deleteQuestionController);
+
+// User routes (authenticated users - no correct answers exposed)
+quizRouter.openapi(listQuizzesUserRoute, listQuizzesUserController);
+quizRouter.openapi(getQuizByIdUserRoute, getQuizByIdUserController);
+quizRouter.openapi(submitQuizAnswerRoute, submitQuizAnswerController);
 
 export default quizRouter;
