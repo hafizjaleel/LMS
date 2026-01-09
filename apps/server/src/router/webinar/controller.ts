@@ -1,7 +1,7 @@
 import { type Context } from "hono";
 import { ZodError } from "zod";
 import { createWebinarSchema, updateWebinarSchema } from "./validation";
-import { createWebinarService, updateWebinarService, deleteWebinarService, getWebinarService } from "./service";
+import { createWebinarService, updateWebinarService, deleteWebinarService, getWebinarService, listWebinarsService } from "./service";
 
 /**
  * Handles an HTTP request to create a webinar.
@@ -205,6 +205,34 @@ export const getWebinarController = async (c: Context) => {
         404
       );
     }
+    return c.json(
+      {
+        success: false,
+        error: error instanceof Error ? error.message : "Internal Server Error",
+      },
+      500
+    );
+  }
+};
+
+export const listWebinarsController = async (c: Context) => {
+  try {
+    const q = c.req.query();
+    const page = Number(q.page) || 1;
+    const limit = Number(q.limit) || 10;
+    const search = q.search;
+    const status = q.status;
+
+    const result = await listWebinarsService({ page, limit, search, status });
+
+    return c.json(
+      {
+        success: true,
+        data: result,
+      },
+      200
+    );
+  } catch (error) {
     return c.json(
       {
         success: false,

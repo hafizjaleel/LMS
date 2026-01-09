@@ -293,18 +293,44 @@ export const getLessonByIdService = async (id: string) => {
   const lesson = await db.query.lessons.findFirst({
     where: and(eq(lessons.id, id), isNull(lessons.deletedAt)),
     with: {
-      lessonFiles:{
+      lessonFiles: {
         where: (lessonFiles, { isNull }) => isNull(lessonFiles.deletedAt),
-        with:{
+        with: {
           file: true,
-          
-        }
-      }
+        },
+      },
     },
   });
 
   if (!lesson) {
     throw new Error("Lesson not found");
+  }
+
+  // Attach signed URLs and reshape file metadata for each lesson file
+  if (lesson.lessonFiles && Array.isArray(lesson.lessonFiles)) {
+    const mappedFiles = await Promise.all(
+      lesson.lessonFiles.map(async (lf) => {
+        const fileRecord = lf.file;
+        if (!fileRecord || fileRecord.deletedAt) return null;
+
+        const url = await documentStorage.getSignedUrl(fileRecord.key);
+
+        return {
+          id: lf.id,
+          fileId: lf.fileId,
+          file: {
+            id: fileRecord.id,
+            fileName: fileRecord.originalFilename,
+            url,
+            fileType: fileRecord.mimeType,
+            fileSize: fileRecord.fileSize,
+          },
+        };
+      })
+    );
+
+    // Cast the reshaped result to the expected type for the response
+    lesson.lessonFiles = mappedFiles.filter(Boolean) as unknown as typeof lesson.lessonFiles;
   }
 
   return lesson;

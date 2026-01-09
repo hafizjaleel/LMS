@@ -286,6 +286,68 @@ export const getWebinarResponseSchema = z.object({
   }),
 });
 
+/**
+ * Query schema for listing webinars with pagination and filters.
+ */
+export const webinarPaginationQuerySchema = z.object({
+  page: z.string().optional().default("1").transform(Number).openapi({
+    description: "Page number",
+    example: "1",
+    param: { name: "page", in: "query" },
+  }),
+  limit: z.string().optional().default("10").transform(Number).openapi({
+    description: "Items per page",
+    example: "10",
+    param: { name: "limit", in: "query" },
+  }),
+  search: z.string().optional().openapi({
+    description: "Search term for webinar title",
+    example: "AI",
+    param: { name: "search", in: "query" },
+  }),
+  status: webinarStatusEnum.optional().openapi({
+    description: "Filter by webinar status",
+    example: "upcoming",
+    param: { name: "status", in: "query" },
+  }),
+});
+
+/**
+ * Response schema for listing webinars with pagination.
+ */
+export const listWebinarsResponseSchema = z.object({
+  success: z.boolean(),
+  data: z.object({
+    webinars: z.array(z.object({
+      id: z.string().uuid(),
+      title: z.string(),
+      slug: z.string(),
+      description: z.string().nullable(),
+      isFree: z.boolean(),
+      price: z.string().nullable(),
+      thumbnailFileId: z.string().uuid().nullable(),
+      thumbnailUrl: z.string().nullable(),
+      liveLink: z.string().nullable(),
+      scheduledAt: z.string(),
+      duration: z.number(),
+      status: webinarStatusEnum,
+      instructors: z.array(z.object({
+        id: z.string().uuid(),
+        name: z.string(),
+        email: z.string().email(),
+      })),
+      createdAt: z.string(),
+      updatedAt: z.string(),
+    })),
+    pagination: z.object({
+      page: z.number(),
+      limit: z.number(),
+      total: z.number(),
+      totalPages: z.number(),
+    }),
+  }),
+});
+
 // Error response schema
 export const errorResponseSchema = z.object({
   success: z.boolean().openapi({
