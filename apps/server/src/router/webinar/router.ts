@@ -7,6 +7,8 @@ import {
   deleteWebinarResponseSchema,
   getWebinarResponseSchema,
   webinarIdParamSchema,
+  webinarPaginationQuerySchema,
+  listWebinarsResponseSchema,
   errorResponseSchema,
 } from "./validation";
 
@@ -153,6 +155,33 @@ export const deleteWebinarRoute = createRoute({
         },
       },
       description: "Webinar not found",
+    },
+    500: {
+      content: {
+        "application/json": {
+          schema: errorResponseSchema,
+        },
+      },
+      description: "Internal server error",
+    },
+  },
+});
+
+export const listWebinarsRoute = createRoute({
+  method: "get",
+  path: "/",
+  tags: ["Webinars"],
+  request: {
+    query: webinarPaginationQuerySchema,
+  },
+  responses: {
+    200: {
+      content: {
+        "application/json": {
+          schema: listWebinarsResponseSchema,
+        },
+      },
+      description: "Webinars retrieved successfully",
     },
     500: {
       content: {

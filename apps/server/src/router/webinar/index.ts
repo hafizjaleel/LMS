@@ -1,6 +1,6 @@
 import { OpenAPIHono } from "@hono/zod-openapi";
-import { createWebinarRoute, updateWebinarRoute, deleteWebinarRoute, getWebinarRoute } from "./router";
-import { createWebinarController, updateWebinarController, deleteWebinarController, getWebinarController } from "./controller";
+import { createWebinarRoute, updateWebinarRoute, deleteWebinarRoute, getWebinarRoute, listWebinarsRoute } from "./router";
+import { createWebinarController, updateWebinarController, deleteWebinarController, getWebinarController, listWebinarsController } from "./controller";
 import { authMiddleware, adminMiddleware } from "../../middleware/auth.middleware";
 
 const webinarRouter = new OpenAPIHono();
@@ -13,6 +13,7 @@ const webinarRouter = new OpenAPIHono();
 webinarRouter.openapi(createWebinarRoute, createWebinarController);
 webinarRouter.openapi(updateWebinarRoute, updateWebinarController);
 webinarRouter.openapi(deleteWebinarRoute, deleteWebinarController);
+webinarRouter.openapi(listWebinarsRoute, listWebinarsController);
 webinarRouter.openapi(getWebinarRoute, getWebinarController);
 
 export default webinarRouter;

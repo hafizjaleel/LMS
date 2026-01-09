@@ -31,7 +31,7 @@ export const createDirectUpload = async (
       cors_origin: corsOrigin,
       new_asset_settings: {
         playback_policy: ['public'],
-        mp4_support: 'standard',
+        mp4_support: 'none',
       },
     });
 

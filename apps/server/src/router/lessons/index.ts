@@ -32,15 +32,6 @@ lessonRouter.openapi(updateLessonRoute, updateLessonController);
 // List lessons route (authenticated users)
 lessonRouter.openapi(listLessonsRoute, listLessonsController);
 
-// Get lesson by ID route (authenticated users)
-lessonRouter.openapi(getLessonByIdRoute, getLessonByIdController);
-
-// Delete lesson route (authenticated users)
-lessonRouter.openapi(deleteLessonRoute, deleteLessonController);
-
-// Mark lesson as completed route (authenticated users)
-lessonRouter.openapi(markLessonCompletedRoute, markLessonCompletedController);
-
 // ===================== LESSON COMMENT ROUTES =====================
 
 // Create lesson comment route (authenticated users)
@@ -57,5 +48,14 @@ lessonRouter.openapi(updateLessonCommentRoute, updateLessonCommentController);
 
 // Delete lesson comment route (authenticated users)
 lessonRouter.openapi(deleteLessonCommentRoute, deleteLessonCommentController);
+
+// Get lesson by ID route (authenticated users)
+lessonRouter.openapi(getLessonByIdRoute, getLessonByIdController);
+
+// Delete lesson route (authenticated users)
+lessonRouter.openapi(deleteLessonRoute, deleteLessonController);
+
+// Mark lesson as completed route (authenticated users)
+lessonRouter.openapi(markLessonCompletedRoute, markLessonCompletedController);
 
 export default lessonRouter;

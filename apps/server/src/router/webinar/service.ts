@@ -2,7 +2,7 @@ import { db } from "../../db";
 import { webinars, webinarInstructors, webinarRegistrations } from "../../db/schema/webinar";
 import { files } from "../../db/schema/files";
 import { user } from "../../db/schema/auth";
-import { eq, like, and, isNull, inArray } from "drizzle-orm";
+import { eq, like, and, isNull, inArray, count } from "drizzle-orm";
 import { generateSlug, generateUniqueSlug } from "../../utils/slug";
 import { documentStorage } from "../../config/upload";
 import type z from "zod";
@@ -236,6 +236,84 @@ export const deleteWebinarService = async (id: string): Promise<boolean> => {
  * @param {string} id - The ID of the webinar to retrieve.
  * @returns {Promise<Webinar>} - The webinar object with instructors and thumbnail URL.
  */
+export const listWebinarsService = async (params: { page?: number; limit?: number; search?: string; status?: string; }) => {
+  const page = params.page || 1;
+  const limit = params.limit || 10;
+  const offset = (page - 1) * limit;
+
+  const whereClauses: any[] = [isNull(webinars.deletedAt)];
+  if (params.search) whereClauses.push(like(webinars.title, `%${params.search}%`));
+  if (params.status) whereClauses.push(eq(webinars.status, params.status as any));
+
+  const [totalResult] = await db.select({ count: count() }).from(webinars).where(and(...whereClauses));
+  const total = totalResult?.count || 0;
+
+  const records = await db
+    .select()
+    .from(webinars)
+    .where(and(...whereClauses))
+    .orderBy(webinars.scheduledAt)
+    .limit(limit)
+    .offset(offset);
+
+  const webinarIds = records.map((r) => r.id);
+
+  let instructorsMap: Record<string, Array<{ id: string; name: string; email: string }>> = {};
+  if (webinarIds.length > 0) {
+    const instructorRows = await db
+      .select({
+        webinarId: webinarInstructors.webinarId,
+        id: user.id,
+        name: user.name,
+        email: user.email,
+      })
+      .from(webinarInstructors)
+      .innerJoin(user, eq(webinarInstructors.instructorId, user.id))
+      .where(and(inArray(webinarInstructors.webinarId, webinarIds), isNull(webinarInstructors.deletedAt)));
+
+    instructorsMap = instructorRows.reduce((acc: any, ir: any) => {
+      acc[ir.webinarId] = acc[ir.webinarId] || [];
+      acc[ir.webinarId].push({ id: ir.id, name: ir.name, email: ir.email });
+      return acc;
+    }, {});
+  }
+
+  const mapped = await Promise.all(records.map(async (w) => {
+    let thumbnailUrl: string | null = null;
+    if (w.thumbnailFileId) {
+      const [f] = await db.select().from(files).where(eq(files.id, w.thumbnailFileId)).limit(1);
+      if (f) thumbnailUrl = await documentStorage.getSignedUrl(f.key);
+    }
+    return {
+      id: w.id,
+      title: w.title,
+      slug: w.slug,
+      description: w.description,
+      isFree: w.isFree,
+      price: w.price,
+      thumbnailFileId: w.thumbnailFileId,
+      thumbnailUrl,
+      liveLink: w.liveLink,
+      scheduledAt: w.scheduledAt.toISOString(),
+      duration: w.duration,
+      status: w.status,
+      instructors: instructorsMap[w.id] || [],
+      createdAt: w.createdAt.toISOString(),
+      updatedAt: w.updatedAt.toISOString(),
+    };
+  }));
+
+  return {
+    webinars: mapped,
+    pagination: {
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit),
+    },
+  };
+};
+
 export const getWebinarService = async (id: string) => {
   const [webinar] = await db
     .select()
